@@ -50,7 +50,7 @@ run api="nyx": (build api)
     # qemu-img create -f qcow2 -o backing_file=target/linux_builder/output/linux.qcow2 -F qcow2 target/linux_builder/output/linux.tmp.qcow2
 
     sudo {{FUZZER}} \
-       -machine type=pc-q35-8.2,smm=on,accel=kvm -cpu host,migratable=on -m 16G -smp 32,sockets=1,cores=32,threads=1 -boot strict=on -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd -drive if=pflash,format=raw,file=OVMF_VARS_4M.fd -drive file=ubuntu24.04.qcow2,format=qcow2 -device virtio-balloon-pci -device vfio-pci,host=0000:41:00.0,romfile=/home/ilhanraja/Downloads/nvgpu-bios.bin -device vfio-pci,host=0000:41:00.1 -device vfio-pci,host=0000:4a:00.0 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no -device virtio-net-pci,netdev=net0,romfile= -vga none -nodefaults -serial mon:stdio
+       -machine type=pc-q35-8.2,smm=on,accel=kvm -cpu host,migratable=on -m 16G -smp 32,sockets=1,cores=32,threads=1 -boot strict=on -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd -drive if=pflash,format=raw,file=OVMF_VARS_4M.fd -drive file=ubuntu24.04.qcow2,format=qcow2 -device virtio-balloon-pci -device vfio-pci,host=0000:41:00.0,romfile=/home/ilhanraja/Downloads/nvgpu-bios.bin -device vfio-pci,host=0000:41:00.1 -device vfio-pci,host=0000:4a:00.0 -netdev tap,id=net0,ifname=tap0,script=no,downscript=no -device virtio-net-pci,netdev=net0,romfile= -vga none -nodefaults -serial mon:stdio -s
 
       
 

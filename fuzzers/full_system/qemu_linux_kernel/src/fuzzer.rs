@@ -17,7 +17,7 @@ use libafl::{
     mutators::{havoc_mutations, scheduled::HavocScheduledMutator, I2SRandReplaceBinonly},
     observers::{CanTrack, HitcountsMapObserver, TimeObserver, VariableMapObserver},
     schedulers::{IndexesLenTimeMinimizerScheduler, QueueScheduler},
-    stages::{ShadowTracingStage, StdMutationalStage},
+    stages::{CalibrationStage, ShadowTracingStage, StdMutationalStage},
     state::{HasCorpus, StdState},
     Error,
 };
@@ -83,7 +83,7 @@ where
     S: HasExecutions + Unpin,
 {
     // Allow linux process address space addresses as feedback
-    modules.allow_address_range_all(&LINUX_PROCESS_ADDRESS_RANGE);
+    // modules.allow_address_range_all(&LINUX_PROCESS_ADDRESS_RANGE);
 
     Emulator::builder()
         .qemu_parameters(args)
@@ -124,7 +124,7 @@ pub fn fuzz() {
     let mut run_client = |state: Option<_>, mut mgr, _client_description| {
         // Initialize QEMU
         let args: Vec<String> = env::args().collect();
-
+        unsafe { MAX_EDGES_FOUND = EDGES_MAP_DEFAULT_SIZE; }
         // Create an observation channel using the coverage map
         let mut edges_observer = unsafe {
             HitcountsMapObserver::new(VariableMapObserver::from_mut_slice(
@@ -140,7 +140,6 @@ pub fn fuzz() {
             StdEdgeCoverageClassicModule::builder()
                 .map_observer(edges_observer.as_mut())
                 .build()?,
-            CmpLogModule::default(),
         );
 
         let emu = get_emulator(args, modules)?;
@@ -161,11 +160,15 @@ pub fn fuzz() {
         // Create a cmplog observer
         let cmplog_observer = CmpLogObserver::new("cmplog", true);
 
+        let map_feedback = MaxMapFeedback::new(&edges_observer);
+
+        let calibration = CalibrationStage::new(&map_feedback);
+
         // Feedback to rate the interestingness of an input
         // This one is composed by two Feedbacks in OR
         let mut feedback = feedback_or!(
             // New maximization map feedback linked to the edges observer and the feedback state
-            MaxMapFeedback::new(&edges_observer),
+            map_feedback,
             // Time feedback, this one does not need a feedback state
             TimeFeedback::new(&time_observer)
         );
@@ -234,7 +237,7 @@ pub fn fuzz() {
         // Setup an havoc mutator with a mutational stage
         let tracing = ShadowTracingStage::new();
         let mutator = HavocScheduledMutator::new(havoc_mutations());
-        let mut stages = tuple_list!(tracing, i2s, StdMutationalStage::new(mutator),);
+        let mut stages = tuple_list!(calibration, tracing, i2s, StdMutationalStage::new(mutator),);
 
         match fuzzer.fuzz_loop(&mut stages, &mut executor, &mut state, &mut mgr) {
             Ok(_) | Err(Error::ShuttingDown) => Ok(()),

@@ -3,6 +3,7 @@ use std::{ffi::CStr, sync::OnceLock};
 use enum_map::EnumMap;
 use libafl::{executors::ExitKind, inputs::HasTargetBytes};
 use libafl_qemu_sys::GuestVirtAddr;
+use libafl_targets::{EDGES_MAP_DEFAULT_SIZE};
 use libc::c_uint;
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
             AcquireCommand, GetHostConfigCommand, GetPayloadCommand, NextPayloadCommand,
             NyxCommandManager, PanicCommand, PrintfCommand, RangeSubmitCommand, ReleaseCommand,
             SetAgentConfigCommand, SubmitCR3Command, SubmitPanicCommand, UserAbortCommand,
-            bindings,
+            SetCoverageMapCommand, bindings,
         },
         parser::NativeCommandParser,
     },
@@ -292,5 +293,29 @@ where
         let msg = get_guest_string(qemu, Regs::Rcx)?;
 
         Ok(PrintfCommand::new(msg))
+    }
+}
+
+pub struct SetCoverageMapCommandParser;
+impl<C, ET, I, S, SM> NativeCommandParser<C, NyxCommandManager<S>, NyxEmulatorDriver, ET, I, S, SM>
+    for SetCoverageMapCommandParser
+where
+    ET: EmulatorModuleTuple<I, S>,
+    I: HasTargetBytes + Unpin,
+    S: Unpin,
+    SM: IsSnapshotManager,
+{
+    type OutputCommand = SetCoverageMapCommand;
+
+    const COMMAND_ID: c_uint = bindings::HYPERCALL_KAFL_SET_COVERAGE_MAP;
+
+    fn parse(
+        qemu: Qemu,
+        _arch_regs_map: &'static EnumMap<ExitArgs, Regs>,
+    ) -> Result<Self::OutputCommand, CommandError> {
+        let map_virt_addr = qemu.read_reg(Regs::Rcx)? as GuestVirtAddr;
+        let guest_coverage_map: [u8; EDGES_MAP_DEFAULT_SIZE] = unsafe { qemu.read_mem_val(map_virt_addr as u64)? };
+
+        Ok(SetCoverageMapCommand::new(map_virt_addr as u64, guest_coverage_map))
     }
 }

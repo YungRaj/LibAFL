@@ -18,6 +18,7 @@ use std::{
 use enum_map::EnumMap;
 use libafl::{executors::ExitKind, inputs::HasTargetBytes};
 use libafl_qemu_sys::{GuestAddr, GuestVirtAddr};
+use libafl_targets::{EDGES_MAP_DEFAULT_SIZE, edges_map_mut_ptr};
 use libc::c_uint;
 use paste::paste;
 
@@ -31,6 +32,7 @@ use crate::{
             NextPayloadCommandParser, PanicCommandParser, PrintfCommandParser,
             RangeSubmitCommandParser, ReleaseCommandParser, SetAgentConfigCommandParser,
             SubmitCR3CommandParser, SubmitPanicCommandParser, UserAbortCommandParser,
+            SetCoverageMapCommandParser,
         },
     },
     get_exit_arch_regs,
@@ -182,7 +184,8 @@ define_nyx_command_manager!(
         PanicCommand,
         SubmitPanicCommand,
         UserAbortCommand,
-        RangeSubmitCommand
+        RangeSubmitCommand,
+        SetCoverageMapCommand
     ],
     [
         AcquireCommandParser,
@@ -196,7 +199,8 @@ define_nyx_command_manager!(
         SubmitPanicCommandParser,
         PanicCommandParser,
         UserAbortCommandParser,
-        RangeSubmitCommandParser
+        RangeSubmitCommandParser,
+        SetCoverageMapCommandParser
     ]
 );
 
@@ -711,6 +715,49 @@ impl<C, CM, ED, ET, I, S, SM> IsCommand<C, CM, ED, ET, I, S, SM> for SetAgentCon
         assert_eq!(agent_version, bindings::NYX_AGENT_VERSION);
 
         // TODO: use agent config
+
+        Ok(None)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCoverageMapCommand {
+    map_virt_addr: GuestAddr,
+    guest_coverage_map: [u8; EDGES_MAP_DEFAULT_SIZE],
+}
+
+impl SetCoverageMapCommand {
+    #[must_use]
+    pub fn new(map_virt_addr: GuestAddr, guest_coverage_map: [u8; EDGES_MAP_DEFAULT_SIZE]) -> Self {
+        Self { map_virt_addr, guest_coverage_map }
+    }
+}
+
+impl<C, ET, I, S, SM> IsCommand<C, NyxCommandManager<S>, NyxEmulatorDriver, ET, I, S, SM>
+    for SetCoverageMapCommand 
+where
+    ET: EmulatorModuleTuple<I, S>,
+    I: HasTargetBytes + Unpin,
+    S: Unpin,
+    SM: IsSnapshotManager,
+{
+    fn usable_at_runtime(&self) -> bool {
+        true
+    }
+    
+    fn run(
+        &self,
+        _emu: &mut Emulator<C, NyxCommandManager<S>, NyxEmulatorDriver, ET, I, S, SM>,
+        _state: &mut S,
+        _input: &I,
+        _ret_reg: Option<Regs>,
+    ) -> Result<Option<EmulatorDriverResult<C>>, EmulatorDriverError> {
+        log::debug!("Received Coverage Map at addr: {0}", self.map_virt_addr);
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(self.guest_coverage_map.as_ptr(),
+                                          edges_map_mut_ptr(), EDGES_MAP_DEFAULT_SIZE);
+        }
 
         Ok(None)
     }
