@@ -89,6 +89,7 @@ pub fn last_os_error() -> i32 {
     )
 ))]
 pub fn last_os_error() -> i32 {
+    #[cfg(unix)]
     unsafe {
         #[cfg(target_os = "linux")]
         {
@@ -108,6 +109,12 @@ pub fn last_os_error() -> i32 {
         {
             *libc::__error()
         }
+    }
+
+    // Fallback for no_std without unix
+    #[cfg(not(unix))]
+    {
+        0
     }
 }
 
